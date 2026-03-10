@@ -39,7 +39,7 @@ public class PostService {
                 .content(request.getContent())
                 .imageUrl(request.getImageUrl())
                 .user(user)
-                .shareCount(0)
+                .shareCount(0L)
                 .build();
 
         if (request.getSharedPostId() != null) {
@@ -179,7 +179,7 @@ public class PostService {
                 .build();
     }
 
-    private PostResponse mapToPostResponse(Post post, Authentication authentication) {
+    public PostResponse mapToPostResponse(Post post, Authentication authentication) {
         Long likesCount = postRepository.countLikes(post.getId());
         Long commentsCount = postRepository.countComments(post.getId());
 
