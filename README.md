@@ -13,6 +13,7 @@ A high-performance, scalable social media platform built with Spring Boot and Re
 - [Security](#security)
 - [Testing](#testing)
 - [Deployment](#deployment)
+- [Free Deployment Guide](DEPLOYMENT_FREE.md)
 - [Performance](#performance)
 - [Contributing](#contributing)
 
@@ -343,9 +344,11 @@ npx cypress open
 
 ## Deployment
 
-### AWS ECS Deployment
+### Free Deployment Guide 🚀
 
-1. **Build and push Docker images**
+If you are looking for a way to deploy this project for free, check out our [Free Deployment Guide](DEPLOYMENT_FREE.md). It covers using services like Render, Vercel, Neon, and Upstash.
+
+### AWS ECS Deployment
 ```bash
 docker build -t backend:latest ./backend
 docker build -t frontend:latest ./frontend
