@@ -37,7 +37,7 @@ public class Post {
 
     @Column(name = "share_count")
     @Builder.Default
-    private Integer shareCount = 0;
+    private Long shareCount = 0L;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
@@ -57,11 +57,14 @@ public class Post {
 
     // Relationships
     @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
     private Set<Comment> comments = new HashSet<>();
 
     @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
     private Set<Like> likes = new HashSet<>();
 
     @OneToMany(mappedBy = "sharedPost", cascade = CascadeType.ALL)
+    @Builder.Default
     private Set<Post> shares = new HashSet<>();
 }
