@@ -37,8 +37,7 @@ const LoginPage = () => {
       );
       navigate('/');
     } catch (err: unknown) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const error = err as any;
+      const error = err as { response?: { data?: { message?: string } } };
       setError(error.response?.data?.message || 'Login failed. Please try again.');
     } finally {
       setLoading(false);
