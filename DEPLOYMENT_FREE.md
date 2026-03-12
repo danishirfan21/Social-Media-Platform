@@ -8,7 +8,7 @@ This guide explains how to deploy the Social Media Platform for free using moder
 |-----------|----------|------|
 | **Database (PostgreSQL)** | [Neon](https://neon.tech) | Free Tier (0.5 vCPU, 2GB RAM) |
 | **Cache (Redis)** | [Upstash](https://upstash.com) | Free Tier (Max 10K requests/day) |
-| **Events (Kafka)** | [Upstash](https://upstash.com) | Free Tier (Max 10K messages/day) |
+| **Events (Kafka)** | [Aiven](https://aiven.io) | Free Tier (Apache Kafka) |
 | **Backend (Spring Boot)** | [Render](https://render.com) or [Koyeb](https://koyeb.com) | Free Instance (Spin-down after inactivity) |
 | **Frontend (React)** | [Vercel](https://vercel.com) or [Netlify](https://netlify.com) | Free Tier |
 
@@ -21,22 +21,21 @@ This guide explains how to deploy the Social Media Platform for free using moder
 3. Copy the **Connection String** (Pooled preferred). It looks like:
    `postgres://user:password@ep-cool-darkness-123456-pooler.us-east-2.aws.neon.tech/socialmedia?sslmode=require`
 
-## 2. Redis & Kafka Setup (Upstash)
+## 2. Redis & Kafka Setup
 
-### Redis
+### Redis (Upstash)
 1. Create an account at [Upstash](https://upstash.com).
 2. Create a **Redis** database.
 3. Copy the **Endpoint** (host and port) and **Password**.
 
-### Kafka
-1. In the same Upstash console, create a **Kafka** cluster.
-2. Create a topic (e.g., `social-media-events`).
-3. Go to the **Details** tab and copy the following:
-   - **Endpoint** (Bootstrap Server)
-   - **Username**
-   - **Password**
-4. Under the "Kafka" tab, you will find the **SASL JAAS Config**. It usually looks like this:
-   `org.apache.kafka.common.security.plain.PlainLoginModule required username="YOUR_USERNAME" password="YOUR_PASSWORD";`
+### Kafka (Aiven)
+1. Create an account at [Aiven.io](https://aiven.io).
+2. Create a new project and select **Apache Kafka**.
+3. Choose the **Free Plan** and a region (e.g., `aws-us-east-1` to match Neon).
+4. Once the service is running, go to the **Overview** tab and copy the **Service URI** (this is your Bootstrap Server).
+5. In the **Authentication Method**, Aiven Free Tier typically uses **SASL** (Scram-SHA-256).
+6. Create a user (e.g., `avnadmin`) and copy the **Password**.
+7. Create a topic named `social-media-events`.
 
 ---
 
@@ -55,10 +54,10 @@ This guide explains how to deploy the Social Media Platform for free using moder
    - `REDIS_HOST`: `your-upstash-redis-host`
    - `REDIS_PORT`: `your-upstash-redis-port`
    - `REDIS_PASSWORD`: `your-upstash-redis-password`
-   - `KAFKA_SERVERS`: `your-upstash-kafka-endpoint`
-   - `KAFKA_SASL_MECHANISM`: `SCRAM-SHA-256` (Upstash default)
+   - `KAFKA_SERVERS`: `your-aiven-kafka-service-uri` (e.g., `kafka-xyz.aivencloud.com:port`)
+   - `KAFKA_SASL_MECHANISM`: `SCRAM-SHA-256`
    - `KAFKA_SECURITY_PROTOCOL`: `SASL_SSL`
-   - `KAFKA_JAAS_CONFIG`: `org.apache.kafka.common.security.scram.ScramLoginModule required username="YOUR_UPSTASH_USERNAME" password="YOUR_UPSTASH_PASSWORD";`
+   - `KAFKA_JAAS_CONFIG`: `org.apache.kafka.common.security.scram.ScramLoginModule required username="avnadmin" password="YOUR_AIVEN_PASSWORD";`
    - `JWT_SECRET`: Generate a random 256-bit string.
 
 ---
