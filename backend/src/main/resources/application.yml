@@ -33,6 +33,8 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: true
       timeout: 60000ms
       lettuce:
         pool:
