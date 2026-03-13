@@ -15,6 +15,9 @@ import FeedPage from './pages/FeedPage';
 import ProfilePage from './pages/ProfilePage';
 import FollowersPage from './pages/FollowersPage';
 
+// Layout
+import MainLayout from './components/layout/MainLayout';
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -31,7 +34,7 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const isAuthenticated = useSelector((state: RootState) => state.auth.isAuthenticated);
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+  return isAuthenticated ? <MainLayout>{children}</MainLayout> : <Navigate to="/login" replace />;
 };
 
 function AppRoutes() {
