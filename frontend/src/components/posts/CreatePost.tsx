@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
   Paper,
   Avatar,
@@ -24,16 +24,28 @@ const CreatePost = () => {
   const queryClient = useQueryClient();
 
   const createPostMutation = useMutation({
-    mutationFn: postApi.createPost,
-    onSuccess: () => {
+    mutationFn: (data: { content: string }) => {
+      console.log('Mutation function triggered with data:', data);
+      return postApi.createPost(data);
+    },
+    onSuccess: (data) => {
+      console.log('Post created successfully:', data);
       setContent('');
       queryClient.invalidateQueries({ queryKey: ['feed'] });
     },
+    onError: (error) => {
+      console.error('Post creation failed:', error);
+    }
   });
 
   const handleSubmit = (e: React.FormEvent) => {
+    console.log('handleSubmit triggered');
     e.preventDefault();
-    if (!content.trim()) return;
+    if (!content.trim()) {
+      console.log('Content is empty, skipping mutate');
+      return;
+    }
+    console.log('Calling mutate with content:', content);
     createPostMutation.mutate({ content });
   };
 
@@ -41,7 +53,10 @@ const CreatePost = () => {
     <Paper sx={{ p: 2, mb: 3, borderRadius: 3 }}>
       <Box sx={{ display: 'flex', gap: 2 }}>
         <Avatar src={user?.avatarUrl} alt={user?.username} />
-        <Box component="form" onSubmit={handleSubmit} sx={{ flexGrow: 1 }}>
+        <form 
+          onSubmit={handleSubmit} 
+          style={{ flexGrow: 1 }}
+        >
           <TextField
             fullWidth
             multiline
@@ -88,7 +103,7 @@ const CreatePost = () => {
               {createPostMutation.isPending ? 'Posting...' : 'Post'}
             </Button>
           </Box>
-        </Box>
+        </form>
       </Box>
     </Paper>
   );
