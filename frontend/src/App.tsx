@@ -14,9 +14,15 @@ import RegisterPage from './pages/RegisterPage';
 import FeedPage from './pages/FeedPage';
 import ProfilePage from './pages/ProfilePage';
 import FollowersPage from './pages/FollowersPage';
+import NotificationsPage from './pages/NotificationsPage';
+import SettingsPage from './pages/SettingsPage';
 
 // Layout
 import MainLayout from './components/layout/MainLayout';
+import { useEffect } from 'react';
+import { useDispatch } from 'react-redux';
+import { userApi } from './api/userApi';
+import { setCredentials, setLoading } from './redux/slices/authSlice';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -38,6 +44,35 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
 };
 
 function AppRoutes() {
+  const dispatch = useDispatch();
+  const { user, isAuthenticated } = useSelector((state: RootState) => state.auth);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const token = localStorage.getItem('accessToken');
+      const refreshToken = localStorage.getItem('refreshToken');
+      if (token && !user) {
+        try {
+          dispatch(setLoading(true));
+          const userData = await userApi.getCurrentUser();
+          dispatch(setCredentials({ 
+            user: userData, 
+            accessToken: token, 
+            refreshToken: refreshToken || '' 
+          }));
+        } catch (error) {
+          console.error('Failed to fetch user:', error);
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+        } finally {
+          dispatch(setLoading(false));
+        }
+      }
+    };
+
+    fetchUser();
+  }, [dispatch, user]);
+
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
@@ -63,6 +98,22 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <FollowersPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute>
+            <NotificationsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute>
+            <SettingsPage />
           </ProtectedRoute>
         }
       />

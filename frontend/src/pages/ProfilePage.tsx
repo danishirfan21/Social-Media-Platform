@@ -10,29 +10,41 @@ import {
   Tabs,
 } from '@mui/material';
 import { useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axiosInstance from '@/api/axios';
 import { User, Post, PagedResponse } from '@/types';
 import PostCard from '@/components/posts/PostCard';
 import { useState } from 'react';
+import { userApi } from '@/api/userApi';
+import { postApi } from '@/api/postApi';
 
 const ProfilePage = () => {
   const { userId } = useParams<{ userId: string }>();
   const [tabValue, setTabValue] = useState(0);
+  const queryClient = useQueryClient();
 
   const { data: user, isLoading: isUserLoading } = useQuery({
     queryKey: ['user', userId],
-    queryFn: async () => {
-      const response = await axiosInstance.get<User>(`/users/${userId}`);
-      return response.data;
-    },
+    queryFn: () => userApi.getUserProfile(userId!),
+    enabled: !!userId,
   });
 
   const { data: posts, isLoading: isPostsLoading } = useQuery({
     queryKey: ['user-posts', userId],
-    queryFn: async () => {
-      const response = await axiosInstance.get<PagedResponse<Post>>(`/posts/user/${userId}`);
-      return response.data;
+    queryFn: () => postApi.getUserPosts(Number(userId)),
+    enabled: !!userId,
+  });
+
+  const followMutation = useMutation({
+    mutationFn: async () => {
+      if (user?.isFollowing) {
+        return userApi.unfollowUser(Number(userId));
+      } else {
+        return userApi.followUser(Number(userId));
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user', userId] });
     },
   });
 
@@ -69,7 +81,12 @@ const ProfilePage = () => {
                 boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
               }}
             />
-            <Button variant="contained" sx={{ borderRadius: 20, px: 4, mb: 1 }}>
+            <Button 
+              variant="contained" 
+              sx={{ borderRadius: 20, px: 4, mb: 1 }}
+              onClick={() => followMutation.mutate()}
+              disabled={followMutation.isPending}
+            >
               {user.isFollowing ? 'Unfollow' : 'Follow'}
             </Button>
           </Box>

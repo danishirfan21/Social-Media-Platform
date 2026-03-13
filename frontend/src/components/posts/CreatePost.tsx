@@ -15,16 +15,26 @@ import {
 } from '@mui/icons-material';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { postApi } from '@/api/postApi';
 
 const CreatePost = () => {
   const [content, setContent] = useState('');
   const { user } = useSelector((state: RootState) => state.auth);
+  const queryClient = useQueryClient();
+
+  const createPostMutation = useMutation({
+    mutationFn: postApi.createPost,
+    onSuccess: () => {
+      setContent('');
+      queryClient.invalidateQueries({ queryKey: ['feed'] });
+    },
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // API call would go here
-    console.log('Post content:', content);
-    setContent('');
+    if (!content.trim()) return;
+    createPostMutation.mutate({ content });
   };
 
   return (
@@ -70,12 +80,12 @@ const CreatePost = () => {
             </Box>
             <Button
               variant="contained"
-              disabled={!content.trim()}
+              disabled={!content.trim() || createPostMutation.isPending}
               endIcon={<SendIcon />}
               type="submit"
               sx={{ borderRadius: 20, px: 3 }}
             >
-              Post
+              {createPostMutation.isPending ? 'Posting...' : 'Post'}
             </Button>
           </Box>
         </Box>

@@ -56,7 +56,7 @@ public class FollowController {
     public ResponseEntity<PagedResponse<UserResponse>> getFollowing(
             @PathVariable Long userId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "0") int size,
+            @RequestParam(defaultValue = "20") int size,
             Authentication authentication) {
         Pageable pageable = PageRequest.of(page, size);
         return ResponseEntity.ok(followService.getFollowing(userId, pageable, authentication));

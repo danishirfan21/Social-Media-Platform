@@ -18,12 +18,34 @@ import {
 } from '@mui/icons-material';
 import { Post } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { postApi } from '@/api/postApi';
 
 interface PostCardProps {
   post: Post;
 }
 
 const PostCard = ({ post }: PostCardProps) => {
+  const queryClient = useQueryClient();
+
+  const likeMutation = useMutation({
+    mutationFn: async () => {
+      if (post.isLiked) {
+        return postApi.unlikePost(post.id);
+      } else {
+        return postApi.likePost(post.id);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['feed'] });
+      queryClient.invalidateQueries({ queryKey: ['user-posts', post.user.id] });
+    },
+  });
+
+  const handleLike = () => {
+    likeMutation.mutate();
+  };
+
   return (
     <Card sx={{ mb: 3 }}>
       <CardHeader
@@ -71,7 +93,12 @@ const PostCard = ({ post }: PostCardProps) => {
 
       <CardActions disableSpacing sx={{ px: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', mr: 2 }}>
-          <IconButton aria-label="like" color={post.isLiked ? 'primary' : 'default'}>
+          <IconButton 
+            aria-label="like" 
+            color={post.isLiked ? 'primary' : 'default'}
+            onClick={handleLike}
+            disabled={likeMutation.isPending}
+          >
             {post.isLiked ? <FavoriteIcon /> : <FavoriteBorderIcon />}
           </IconButton>
           <Typography variant="body2" color="text.secondary">

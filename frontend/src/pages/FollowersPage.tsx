@@ -11,20 +11,29 @@ import {
   Divider,
 } from '@mui/material';
 import { useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axiosInstance from '@/api/axios';
-import { User } from '@/types';
+import { User, PagedResponse } from '@/types';
+import { userApi } from '@/api/userApi';
 
 const FollowersPage = () => {
   const { userId } = useParams<{ userId: string }>();
+  const queryClient = useQueryClient();
 
-  const { data: followers, isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['followers', userId],
-    queryFn: async () => {
-      const response = await axiosInstance.get<User[]>(`/users/${userId}/followers`);
-      return response.data;
+    queryFn: () => userApi.getFollowers(userId!),
+    enabled: !!userId,
+  });
+
+  const followMutation = useMutation({
+    mutationFn: (targetId: number) => userApi.followUser(targetId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['followers', userId] });
     },
   });
+
+  const followers = data?.content || [];
 
   if (isLoading) return <Typography>Loading followers...</Typography>;
 
@@ -46,8 +55,14 @@ const FollowersPage = () => {
                 <ListItem
                   sx={{ py: 2, px: 3 }}
                   secondaryAction={
-                    <Button variant="outlined" size="small" sx={{ borderRadius: 20 }}>
-                      Follow
+                    <Button 
+                      variant="outlined" 
+                      size="small" 
+                      sx={{ borderRadius: 20 }}
+                      onClick={() => followMutation.mutate(user.id)}
+                      disabled={user.isFollowing || followMutation.isPending}
+                    >
+                      {user.isFollowing ? 'Following' : 'Follow'}
                     </Button>
                   }
                 >
