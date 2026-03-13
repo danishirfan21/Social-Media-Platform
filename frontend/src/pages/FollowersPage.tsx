@@ -1,3 +1,4 @@
+import React from 'react';
 import {
   Box,
   Typography,
@@ -12,8 +13,7 @@ import {
 } from '@mui/material';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axiosInstance from '@/api/axios';
-import { User, PagedResponse } from '@/types';
+import { User } from '@/types';
 import { userApi } from '@/api/userApi';
 
 const FollowersPage = () => {
@@ -50,7 +50,7 @@ const FollowersPage = () => {
               <Typography color="text.secondary">No followers yet</Typography>
             </Box>
           ) : (
-            followers?.map((user, index) => (
+            followers?.map((user: User, index: number) => (
               <Box key={user.id}>
                 <ListItem
                   sx={{ py: 2, px: 3 }}

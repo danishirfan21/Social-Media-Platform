@@ -1,3 +1,4 @@
+import React, { useState } from 'react';
 import {
   Box,
   Typography,
@@ -11,10 +12,8 @@ import {
 } from '@mui/material';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axiosInstance from '@/api/axios';
-import { User, Post, PagedResponse } from '@/types';
+import { Post } from '@/types';
 import PostCard from '@/components/posts/PostCard';
-import { useState } from 'react';
 import { userApi } from '@/api/userApi';
 import { postApi } from '@/api/postApi';
 
@@ -121,7 +120,7 @@ const ProfilePage = () => {
 
           <Tabs
             value={tabValue}
-            onChange={(_, newValue) => setTabValue(newValue)}
+            onChange={(_event: React.SyntheticEvent, newValue: number) => setTabValue(newValue)}
             sx={{ mt: 1 }}
           >
             <Tab label="Posts" sx={{ fontWeight: 600 }} />
@@ -140,7 +139,7 @@ const ProfilePage = () => {
               <Typography color="text.secondary">No posts yet</Typography>
             </Paper>
           ) : (
-            posts?.content.map((post) => (
+            posts?.content.map((post: Post) => (
               <PostCard key={post.id} post={post} />
             ))
           )}
