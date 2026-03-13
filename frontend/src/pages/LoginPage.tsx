@@ -9,7 +9,15 @@ import {
   Typography,
   Box,
   Alert,
+  InputAdornment,
+  IconButton,
 } from '@mui/material';
+import {
+  Visibility,
+  VisibilityOff,
+  EmailOutlined,
+  LockOutlined,
+} from '@mui/icons-material';
 import { authApi } from '@/api/authApi';
 import { setCredentials } from '@/redux/slices/authSlice';
 
@@ -18,6 +26,7 @@ const LoginPage = () => {
   const dispatch = useDispatch();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -45,63 +54,130 @@ const LoginPage = () => {
   };
 
   return (
-    <Container maxWidth="sm">
-      <Box sx={{ mt: 8, mb: 4 }}>
-        <Paper elevation={3} sx={{ p: 4 }}>
-          <Typography variant="h4" component="h1" gutterBottom align="center">
-            Social Media Platform
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
+      }}
+    >
+      <Container maxWidth="sm">
+        <Paper
+          elevation={3}
+          sx={{
+            p: 5,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            borderRadius: 4,
+          }}
+        >
+          <Box
+            sx={{
+              width: 56,
+              height: 56,
+              borderRadius: '16px',
+              bgcolor: 'primary.main',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              mb: 2,
+              boxShadow: '0 8px 16px -4px rgba(99, 102, 241, 0.5)',
+            }}
+          >
+            <Typography variant="h4" color="white" fontWeight="bold">
+              S
+            </Typography>
+          </Box>
+
+          <Typography variant="h4" component="h1" fontWeight="800" gutterBottom>
+            Welcome Back
           </Typography>
-          <Typography variant="h6" gutterBottom align="center">
-            Sign In
+          <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
+            Enter your details to access your account
           </Typography>
 
           {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
+            <Alert severity="error" sx={{ mb: 3, width: '100%' }}>
               {error}
             </Alert>
           )}
 
-          <form onSubmit={handleSubmit}>
+          <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%' }}>
             <TextField
               fullWidth
-              label="Email"
+              label="Email Address"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               margin="normal"
               required
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <EmailOutlined color="action" />
+                  </InputAdornment>
+                ),
+              }}
             />
             <TextField
               fullWidth
               label="Password"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               margin="normal"
               required
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <LockOutlined color="action" />
+                  </InputAdornment>
+                ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
+
             <Button
               fullWidth
               type="submit"
               variant="contained"
-              sx={{ mt: 3, mb: 2 }}
+              size="large"
+              sx={{ mt: 4, mb: 3, py: 1.5, fontSize: '1rem' }}
               disabled={loading}
             >
               {loading ? 'Signing in...' : 'Sign In'}
             </Button>
 
             <Box sx={{ textAlign: 'center' }}>
-              <Typography variant="body2">
+              <Typography variant="body2" color="text.secondary">
                 Don't have an account?{' '}
-                <Link to="/register" style={{ textDecoration: 'none' }}>
+                <Link
+                  to="/register"
+                  style={{
+                    textDecoration: 'none',
+                    color: '#6366f1',
+                    fontWeight: 600,
+                  }}
+                >
                   Sign Up
                 </Link>
               </Typography>
             </Box>
-          </form>
+          </Box>
         </Paper>
-      </Box>
-    </Container>
+      </Container>
+    </Box>
   );
 };
 
