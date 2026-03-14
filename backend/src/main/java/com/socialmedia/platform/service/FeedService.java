@@ -34,7 +34,7 @@ public class FeedService {
         log.info("Fetching personalized feed for user: {}", userPrincipal.getId());
 
         // Get IDs of users that the current user follows
-        List<Long> followingIds = followRepository.findFollowingIdsByFollowerId(userPrincipal.getId());
+        List<Long> followingIds = new ArrayList<>(followRepository.findFollowingIdsByFollowerId(userPrincipal.getId()));
 
         // Include the user's own posts
         followingIds.add(userPrincipal.getId());
