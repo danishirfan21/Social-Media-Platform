@@ -11,9 +11,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/posts")
@@ -24,14 +26,15 @@ public class PostController {
 
     private final PostService postService;
 
-    @PostMapping
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @RateLimiter(name = "postsApi")
     @Operation(summary = "Create a new post")
     public ResponseEntity<PostResponse> createPost(
-            @Valid @RequestBody PostRequest request,
+            @Valid @RequestPart("post") PostRequest request,
+            @RequestPart(value = "image", required = false) MultipartFile image,
             Authentication authentication) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(postService.createPost(request, authentication));
+                .body(postService.createPost(request, image, authentication));
     }
 
     @GetMapping("/{postId}")

@@ -39,6 +39,8 @@ class PostServiceTest {
     @Mock
     private UserService userService;
     @Mock
+    private FileStorageService fileStorageService;
+    @Mock
     private KafkaTemplate<String, Object> kafkaTemplate;
 
     @InjectMocks
@@ -71,7 +73,7 @@ class PostServiceTest {
             return p;
         });
 
-        PostResponse response = postService.createPost(request, authentication);
+        PostResponse response = postService.createPost(request, null, authentication);
 
         assertNotNull(response);
         assertEquals("Test content", response.getContent());

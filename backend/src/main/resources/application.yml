@@ -85,8 +85,8 @@ spring:
   # File Upload
   servlet:
     multipart:
-      max-file-size: 10MB
-      max-request-size: 10MB
+      max-file-size: 5MB
+      max-request-size: 5MB
       enabled: true
 
   # Session Management
