@@ -12,6 +12,8 @@ import {
 } from '@mui/material';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSelector } from 'react-redux';
+import { RootState } from '@/redux/store';
 import { Post } from '@/types';
 import PostCard from '@/components/posts/PostCard';
 import { userApi } from '@/api/userApi';
@@ -21,6 +23,7 @@ const ProfilePage = () => {
   const { userId } = useParams<{ userId: string }>();
   const [tabValue, setTabValue] = useState(0);
   const queryClient = useQueryClient();
+  const currentUser = useSelector((state: RootState) => state.auth.user);
 
   const { data: user, isLoading: isUserLoading } = useQuery({
     queryKey: ['user', userId],
@@ -80,14 +83,16 @@ const ProfilePage = () => {
                 boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
               }}
             />
-            <Button 
-              variant="contained" 
-              sx={{ borderRadius: 20, px: 4, mb: 1 }}
-              onClick={() => followMutation.mutate()}
-              disabled={followMutation.isPending}
-            >
-              {user.isFollowing ? 'Unfollow' : 'Follow'}
-            </Button>
+            {currentUser?.id.toString() !== userId && (
+              <Button
+                variant="contained"
+                sx={{ borderRadius: 20, px: 4, mb: 1 }}
+                onClick={() => followMutation.mutate()}
+                disabled={followMutation.isPending}
+              >
+                {user.isFollowing ? 'Unfollow' : 'Follow'}
+              </Button>
+            )}
           </Box>
 
           <Typography variant="h4" fontWeight={800}>

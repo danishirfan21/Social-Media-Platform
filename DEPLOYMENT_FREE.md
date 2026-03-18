@@ -76,6 +76,21 @@ This guide explains how to deploy the Social Media Platform for free using moder
 
 ---
 
+## 5. AWS S3 Setup (Optional)
+
+For image uploads, you can use AWS S3. Even if you want a free tier, AWS offers 5GB of S3 storage for free for 12 months.
+
+1. Create an AWS account and an S3 bucket.
+2. Create an IAM user with `AmazonS3FullAccess` (or more restrictive permissions for just your bucket).
+3. Generate **Access Key** and **Secret Key** for the IAM user.
+4. Add the following **Environment Variables** to your Backend (Render):
+   - `AWS_S3_BUCKET`: Your bucket name.
+   - `AWS_REGION`: Your bucket region (e.g., `us-east-1`).
+   - `AWS_ACCESS_KEY`: Your IAM user access key.
+   - `AWS_SECRET_KEY`: Your IAM user secret key.
+
+---
+
 ## Important Notes
 
 - **Cold Starts**: Render's free tier spins down after 15 minutes of inactivity. The first request might take 30-60 seconds.
