@@ -26,7 +26,7 @@ public class PostController {
 
     private final PostService postService;
 
-    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping
     @RateLimiter(name = "postsApi")
     @Operation(summary = "Create a new post")
     public ResponseEntity<PostResponse> createPost(

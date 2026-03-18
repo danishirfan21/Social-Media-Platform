@@ -3,11 +3,7 @@ import { Post, PagedResponse, Comment, CommentRequest } from '@/types';
 
 export const postApi = {
   createPost: async (formData: FormData): Promise<Post> => {
-    const response = await axiosInstance.post('/posts', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await axiosInstance.post('/posts', formData);
     return response.data;
   },
 
