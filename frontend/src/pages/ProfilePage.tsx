@@ -12,6 +12,8 @@ import {
 } from '@mui/material';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSelector } from 'react-redux';
+import { RootState } from '@/redux/store';
 import { Post } from '@/types';
 import PostCard from '@/components/posts/PostCard';
 import { userApi } from '@/api/userApi';
