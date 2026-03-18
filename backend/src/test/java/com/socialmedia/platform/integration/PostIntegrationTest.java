@@ -12,7 +12,9 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.mock.web.MockMultipartFile;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -50,10 +52,16 @@ class PostIntegrationTest extends BaseIntegrationTest {
         PostRequest postRequest = new PostRequest();
         postRequest.setContent("Hello Integration Test " + timestamp);
 
-        mockMvc.perform(post("/api/posts")
-                .header("Authorization", token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(postRequest)))
+        MockMultipartFile postPart = new MockMultipartFile(
+                "post",
+                "",
+                MediaType.APPLICATION_JSON_VALUE,
+                objectMapper.writeValueAsBytes(postRequest)
+        );
+
+        mockMvc.perform(multipart("/api/posts")
+                .file(postPart)
+                .header("Authorization", token))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.content").value("Hello Integration Test " + timestamp));
 

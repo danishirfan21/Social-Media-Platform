@@ -15,6 +15,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import static com.socialmedia.platform.config.KafkaConfig.NOTIFICATION_TOPIC;
 
@@ -28,18 +29,24 @@ public class PostService {
     private final LikeRepository likeRepository;
     private final CommentRepository commentRepository;
     private final UserService userService;
+    private final FileStorageService fileStorageService;
     private final KafkaTemplate<String, NotificationEvent> kafkaTemplate;
 
     @Transactional
     @CacheEvict(value = "userFeed", allEntries = true)
-    public PostResponse createPost(PostRequest request, Authentication authentication) {
+    public PostResponse createPost(PostRequest request, MultipartFile image, Authentication authentication) {
         UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
         User user = userRepository.findById(userPrincipal.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", userPrincipal.getId()));
 
+        String imageUrl = request.getImageUrl();
+        if (image != null && !image.isEmpty()) {
+            imageUrl = fileStorageService.uploadFile(image);
+        }
+
         Post post = Post.builder()
                 .content(request.getContent())
-                .imageUrl(request.getImageUrl())
+                .imageUrl(imageUrl)
                 .user(user)
                 .shareCount(0L)
                 .build();

@@ -42,10 +42,16 @@ class PostControllerTest extends BaseControllerTest {
         PostRequest request = new PostRequest();
         request.setContent("Test content");
 
-        mockMvc.perform(post("/api/posts")
-                .with(csrf())
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
+        org.springframework.mock.web.MockMultipartFile postPart = new org.springframework.mock.web.MockMultipartFile(
+                "post",
+                "",
+                MediaType.APPLICATION_JSON_VALUE,
+                objectMapper.writeValueAsBytes(request)
+        );
+
+        mockMvc.perform(multipart("/api/posts")
+                .file(postPart)
+                .with(csrf()))
                 .andExpect(status().isCreated());
     }
 
