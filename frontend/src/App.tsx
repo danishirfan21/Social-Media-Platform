@@ -46,7 +46,7 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
 
 function AppRoutes() {
   const dispatch = useDispatch();
-  const { user } = useSelector((state: RootState) => state.auth);
+  const { user, isAuthenticated } = useSelector((state: RootState) => state.auth);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -76,8 +76,14 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
+      <Route
+        path="/login"
+        element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />}
+      />
+      <Route
+        path="/register"
+        element={isAuthenticated ? <Navigate to="/" replace /> : <RegisterPage />}
+      />
       <Route
         path="/"
         element={
@@ -118,6 +124,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

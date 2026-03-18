@@ -32,6 +32,9 @@ const CreatePost = () => {
       console.log('Post created successfully:', data);
       setContent('');
       queryClient.invalidateQueries({ queryKey: ['feed'] });
+      if (user?.id) {
+        queryClient.invalidateQueries({ queryKey: ['user-posts', user.id.toString()] });
+      }
     },
     onError: (error) => {
       console.error('Post creation failed:', error);

@@ -7,6 +7,7 @@ import com.socialmedia.platform.exception.ResourceNotFoundException;
 import com.socialmedia.platform.repository.*;
 import com.socialmedia.platform.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -30,6 +31,7 @@ public class PostService {
     private final KafkaTemplate<String, NotificationEvent> kafkaTemplate;
 
     @Transactional
+    @CacheEvict(value = "userFeed", allEntries = true)
     public PostResponse createPost(PostRequest request, Authentication authentication) {
         UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
         User user = userRepository.findById(userPrincipal.getId())
