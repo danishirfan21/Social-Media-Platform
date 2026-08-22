@@ -1,4 +1,3 @@
-import React, { useState } from 'react';
 import {
   Box,
   Typography,
@@ -7,8 +6,6 @@ import {
   Grid,
   Button,
   Divider,
-  Tab,
-  Tabs,
 } from '@mui/material';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -21,7 +18,6 @@ import { postApi } from '@/api/postApi';
 
 const ProfilePage = () => {
   const { userId } = useParams<{ userId: string }>();
-  const [tabValue, setTabValue] = useState(0);
   const queryClient = useQueryClient();
   const currentUser = useSelector((state: RootState) => state.auth.user);
 
@@ -122,34 +118,22 @@ const ProfilePage = () => {
           </Grid>
 
           <Divider />
-
-          <Tabs
-            value={tabValue}
-            onChange={(_event: React.SyntheticEvent, newValue: number) => setTabValue(newValue)}
-            sx={{ mt: 1 }}
-          >
-            <Tab label="Posts" sx={{ fontWeight: 600 }} />
-            <Tab label="Media" sx={{ fontWeight: 600 }} />
-            <Tab label="Likes" sx={{ fontWeight: 600 }} />
-          </Tabs>
         </Box>
       </Paper>
 
-      {tabValue === 0 && (
-        <Box>
-          {isPostsLoading ? (
-            <Typography>Loading posts...</Typography>
-          ) : posts?.content.length === 0 ? (
-            <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 3 }}>
-              <Typography color="text.secondary">No posts yet</Typography>
-            </Paper>
-          ) : (
-            posts?.content.map((post: Post) => (
-              <PostCard key={post.id} post={post} />
-            ))
-          )}
-        </Box>
-      )}
+      <Box sx={{ mt: 2 }}>
+        {isPostsLoading ? (
+          <Typography>Loading posts...</Typography>
+        ) : posts?.content.length === 0 ? (
+          <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 3 }}>
+            <Typography color="text.secondary">No posts yet</Typography>
+          </Paper>
+        ) : (
+          posts?.content.map((post: Post) => (
+            <PostCard key={post.id} post={post} />
+          ))
+        )}
+      </Box>
     </Box>
   );
 };

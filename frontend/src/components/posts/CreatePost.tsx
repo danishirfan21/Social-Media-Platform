@@ -24,31 +24,21 @@ const CreatePost = () => {
   const queryClient = useQueryClient();
 
   const createPostMutation = useMutation({
-    mutationFn: (data: { content: string }) => {
-      console.log('Mutation function triggered with data:', data);
-      return postApi.createPost(data);
-    },
-    onSuccess: (data) => {
-      console.log('Post created successfully:', data);
+    mutationFn: (data: { content: string }) => postApi.createPost(data),
+    onSuccess: () => {
       setContent('');
       queryClient.invalidateQueries({ queryKey: ['feed'] });
       if (user?.id) {
         queryClient.invalidateQueries({ queryKey: ['user-posts', user.id.toString()] });
       }
     },
-    onError: (error) => {
-      console.error('Post creation failed:', error);
-    }
   });
 
   const handleSubmit = (e: React.FormEvent) => {
-    console.log('handleSubmit triggered');
     e.preventDefault();
     if (!content.trim()) {
-      console.log('Content is empty, skipping mutate');
       return;
     }
-    console.log('Calling mutate with content:', content);
     createPostMutation.mutate({ content });
   };
 

@@ -10,11 +10,14 @@ import com.socialmedia.platform.repository.LikeRepository;
 import com.socialmedia.platform.repository.PostRepository;
 import com.socialmedia.platform.repository.UserRepository;
 import com.socialmedia.platform.security.UserPrincipal;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.core.Authentication;
@@ -40,6 +43,8 @@ class PostServiceTest {
     private UserService userService;
     @Mock
     private KafkaTemplate<String, Object> kafkaTemplate;
+    @Spy
+    private MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     @InjectMocks
     private PostService postService;

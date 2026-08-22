@@ -1,6 +1,13 @@
 # Social Media Platform
 
-A high-performance, scalable social media platform built with Spring Boot and React + TypeScript. Features real-time notifications, personalized feeds, and comprehensive security.
+A social media platform built with Spring Boot and React + TypeScript: posts, follows, a
+chronological following-based feed, Redis-backed caching, Kafka-driven notifications, and
+authenticated real-time WebSocket delivery.
+
+This README describes what is actually implemented and verified. See
+[docs/VERIFICATION_REPORT.md](docs/VERIFICATION_REPORT.md) for the full audit trail: what was
+broken, what was fixed, and exactly how each claim below was checked against real
+PostgreSQL/Redis/Kafka, not mocks.
 
 ## Table of Contents
 
@@ -13,82 +20,89 @@ A high-performance, scalable social media platform built with Spring Boot and Re
 - [Security](#security)
 - [Testing](#testing)
 - [Deployment](#deployment)
-- [Free Deployment Guide](DEPLOYMENT_FREE.md)
-- [Performance](#performance)
+- [Observability](#observability)
+- [Known Limitations](#known-limitations)
 - [Contributing](#contributing)
 
 ## Overview
 
 This platform enables users to:
-- Create, edit, and delete posts with image uploads
+- Create, edit, and delete posts (image posts use a URL string, not a server-side upload)
 - Like, comment, and share posts
 - Follow/unfollow other users
-- Receive real-time notifications via WebSocket
-- View personalized feed based on following
+- Receive real-time notifications via an authenticated WebSocket/STOMP connection
+- View a chronological feed of posts from people they follow
 
 ## Tech Stack
 
 ### Backend
 - **Java 17** with Spring Boot 3.2
-- **PostgreSQL** - Primary database
-- **Redis** - Caching layer
-- **Kafka** - Event streaming
-- **WebSocket** - Real-time notifications
-- **Spring Security** - OAuth2 + JWT authentication
+- **PostgreSQL** - primary database, schema managed by Flyway migrations
+- **Redis** - feed caching (Spring Cache abstraction, manually instrumented for hit/miss metrics)
+- **Kafka** - a single `notification-events` topic carries all notification types (new
+  follower, post liked, commented, shared) from producer to consumer
+- **WebSocket (STOMP over SockJS)** - real-time notifications, authenticated via JWT passed
+  as a STOMP CONNECT header (see [Security](#security))
+- **Spring Security** - JWT (HS256) + optional Google OAuth2 login
 - **Swagger/OpenAPI** - API documentation
-- **Spring Boot Actuator** - Metrics and monitoring
+- **Spring Boot Actuator + Micrometer/Prometheus** - health, metrics, custom counters
 
 ### Frontend
 - **React 18** with TypeScript
-- **Redux Toolkit** - State management
-- **React Query** - Data fetching and caching
-- **Material UI** - Component library
-- **Axios** - HTTP client with interceptors
-- **Vite** - Build tool
-- **WebSocket Client** - Real-time updates
+- **Redux Toolkit** - state management
+- **React Query** - data fetching and caching
+- **Material UI** - component library
+- **Axios** - HTTP client with a refresh-token interceptor
+- **Vite** - build tool
+- **@stomp/stompjs + sockjs-client** - WebSocket notifications client
 
 ### DevOps
-- **Docker** + Docker Compose
-- **GitHub Actions** - CI/CD pipeline
-- **AWS ECS** - Container orchestration (production)
-- **S3 + CloudFront** - Static assets and CDN
+- **Docker + Docker Compose** - full local stack (Postgres, Redis, Kafka, backend, frontend)
+- **GitHub Actions** - backend build+test (incl. Testcontainers integration tests, which run
+  for real on GitHub-hosted runners since they have Docker), frontend build+test, and a
+  full docker-compose end-to-end verification job (`scripts/verify.sh`)
+- **AWS ECS/S3/CloudFront** - **not implemented**. See [Known Limitations](#known-limitations).
 
 ## Features
 
 ### Authentication & Authorization
-- Email/password registration and login
-- OAuth2 integration with Google
-- JWT token-based authentication
-- Refresh token rotation
+- Email/password registration and login, JWT access + refresh tokens
+- Optional Google OAuth2 login (code is real - JWT is issued on successful OAuth2 login -
+  but requires real `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` to exercise; not runtime-verified
+  in CI since that would require live Google credentials)
 - Role-based access control (USER, ADMIN)
-- Rate limiting on sensitive endpoints
+- Rate limiting on auth/posts/feed endpoints (Resilience4j `@RateLimiter`, actually wired to
+  those endpoints, not just a dependency)
 
 ### Posts
-- Create posts with text and images
-- Edit and delete own posts
-- Like/unlike posts
-- Comment on posts
-- Share posts
+- Create posts with text and an optional image URL
+- Edit/delete own posts (ownership enforced, returns 403 otherwise)
+- Like/unlike posts, idempotent under concurrent duplicate requests (DB unique constraint on
+  `(post_id, user_id)`, verified by `ConcurrencyIntegrationTest`)
+- Comment on posts, share posts
 - Pagination support
 
 ### Social Features
-- Follow/unfollow users
-- View followers and following lists
-- Personalized feed based on following
-- User profiles with bio and avatar
+- Follow/unfollow users, idempotent under concurrent duplicate requests (DB unique constraint
+  on `(follower_id, following_id)`, verified by `ConcurrencyIntegrationTest`)
+- Followers/following lists
+- Chronological feed of posts from followed users (plus your own) - this is **not** a ranked
+  or ML-personalized feed, just "everyone you follow, newest first"
 
 ### Notifications
-- Real-time WebSocket notifications
-- Notification types: New follower, Post liked, Post commented, Post shared
-- Unread notification count
-- Mark as read functionality
+- New follower, post liked, post commented, post shared - all four flow through one Kafka
+  topic/event type, consumed by a single `@KafkaListener`, persisted, then pushed live over
+  WebSocket to the recipient if they're connected
+- Unread count, mark-as-read / mark-all-as-read
 
 ### Performance
-- Redis caching for feed and frequently accessed data
-- Kafka for asynchronous event processing
-- Database indexing for optimized queries
-- Infinite scroll with pagination
-- Connection pooling (HikariCP)
+- Redis-backed feed cache (10-minute TTL), manually instrumented so hits/misses are real
+  Prometheus counters (`feed.cache.hit` / `feed.cache.miss`), not just an unused annotation
+- Cache is invalidated (`allEntries=true` on the `userFeed` cache) whenever the current user
+  creates a post, follows, or unfollows - simple and correct, at the cost of evicting other
+  users' unrelated cached feed pages too (a deliberate simplicity/consistency tradeoff, not a
+  partial per-user invalidation scheme)
+- Database indexing, HikariCP connection pooling, pagination
 
 ## Architecture
 
@@ -126,10 +140,11 @@ This platform enables users to:
 ### Data Flow
 
 1. **User Request** → Frontend → Backend API
-2. **Authentication** → JWT validation → Process request
-3. **Database Query** → Check Redis cache → Query PostgreSQL if miss
-4. **Async Events** → Publish to Kafka → Process in background
-5. **Real-time Updates** → Kafka Consumer → WebSocket broadcast
+2. **Authentication** → JWT validation → process request
+3. **Database Query** → check Redis cache → query PostgreSQL on miss → populate cache
+4. **Async Events** → publish to Kafka → `NotificationConsumer` persists a `Notification`
+5. **Real-time Updates** → the same consumer pushes over WebSocket to the recipient's
+   authenticated STOMP session, if connected
 
 ## Getting Started
 
@@ -144,8 +159,8 @@ This platform enables users to:
 
 1. **Clone the repository**
 ```bash
-git clone <repository-url>
-cd social-media-platform
+git clone https://github.com/danishirfan21/Social-Media-Platform.git
+cd Social-Media-Platform
 ```
 
 2. **Set up backend**
@@ -159,12 +174,13 @@ mvn clean install
 3. **Set up frontend**
 ```bash
 cd frontend
+cp .env.example .env
 npm install
 ```
 
 4. **Start services with Docker Compose**
 ```bash
-docker-compose up -d postgres redis kafka zookeeper
+docker compose up -d postgres redis kafka zookeeper
 ```
 
 5. **Run backend**
@@ -188,13 +204,21 @@ The application will be available at:
 ### Docker Setup (Full Stack)
 
 ```bash
-# Build and start all services
-docker-compose up --build
-
-# Access the application
-# Frontend: http://localhost:3000
-# Backend: http://localhost:8080
+docker compose up --build
 ```
+
+Or run the full verification (build, tests, stack startup, and a real end-to-end check of
+every claim above) with:
+
+```bash
+bash scripts/verify.sh
+```
+
+**Note on the frontend and Docker:** Vite inlines `VITE_API_BASE_URL` into the JS bundle at
+*build* time, not at container start time - `frontend/Dockerfile` takes it as a build `ARG`,
+and `docker-compose.yml` supplies it via `build.args`. Setting an `environment:` variable on
+the running frontend container does nothing; if you need a different backend URL, rebuild the
+image with a different build arg.
 
 ## API Documentation
 
@@ -267,33 +291,38 @@ Access complete API documentation at: http://localhost:8080/swagger-ui.html
 ### Implemented Security Measures
 
 1. **Authentication**
-   - JWT tokens with RS256 signing
-   - Secure password hashing with BCrypt
-   - OAuth2 integration
-
+   - JWT access + refresh tokens, **HS256/HMAC signed** (the secret in `JWT_SECRET`) - not
+     RS256/RSA, despite what earlier versions of this README claimed. There is no RSA keypair
+     anywhere in this codebase; correcting that claim rather than bolting on unused RSA
+     infrastructure just to match old docs.
+   - BCrypt password hashing
+   - Optional Google OAuth2 login, issuing the same app JWTs on success
 2. **Authorization**
    - Role-based access control
-   - Endpoint protection
-   - Resource ownership validation
-
-3. **Network Security**
-   - HTTPS enforcement
+   - Resource ownership validation (post edit/delete, profile update, notification
+     mark-as-read all return 403 via a dedicated `ForbiddenException`, not a generic 500)
+3. **WebSocket authentication**
+   - The `/ws` handshake itself is unauthenticated at the HTTP layer (browsers can't attach a
+     Bearer header to a WebSocket upgrade), so the JWT is instead passed as a STOMP `CONNECT`
+     header and validated by `WebSocketAuthChannelInterceptor`, which attaches the resolved
+     user id as the STOMP session's Principal. Without this, `convertAndSendToUser(...)` has
+     no session to route a message to - it's not just decorative config.
+4. **Network Security**
    - CORS configuration
-   - Rate limiting (Resilience4j)
-
-4. **Data Protection**
-   - Input validation
-   - SQL injection prevention (JPA)
-   - XSS protection headers
-
-5. **Monitoring**
-   - Spring Boot Actuator
-   - Health checks
-   - Metrics collection
+   - Rate limiting (Resilience4j, applied to real endpoints - see Features above)
+   - No HTTPS enforcement in this codebase (TLS is expected to be terminated by whatever
+     reverse proxy/host you deploy behind; nothing here rejects plain HTTP)
+5. **Data Protection**
+   - Bean Validation on request DTOs
+   - SQL injection prevention via JPA/parameterized queries
+   - Global exception handler no longer leaks raw exception messages on unexpected 500s
+6. **Monitoring**
+   - Spring Boot Actuator, health checks, Prometheus metrics
 
 ### Environment Variables
 
-Create `.env` file based on `.env.example`:
+Create `.env` file based on `.env.example` (see `backend/.env.example` for the full list,
+including comments on when `REDIS_SSL_ENABLED` needs to be true vs false):
 
 ```env
 # Database
@@ -307,15 +336,16 @@ DB_PASSWORD=<strong-password>
 JWT_SECRET=<256-bit-secret-key>
 JWT_EXPIRATION=86400000
 
-# OAuth2
+# OAuth2 (optional)
 GOOGLE_CLIENT_ID=<your-client-id>
 GOOGLE_CLIENT_SECRET=<your-client-secret>
-
-# AWS (for production)
-AWS_S3_BUCKET=<bucket-name>
-AWS_ACCESS_KEY=<access-key>
-AWS_SECRET_KEY=<secret-key>
+FRONTEND_URL=http://localhost:3000
 ```
+
+To actually test Google login: create OAuth 2.0 credentials in the
+[Google Cloud Console](https://console.cloud.google.com/), and add
+`http://localhost:8080/login/oauth2/code/google` (plus your real domain's equivalent for a
+deployed instance) as an authorized redirect URI.
 
 ## Testing
 
@@ -323,9 +353,13 @@ AWS_SECRET_KEY=<secret-key>
 
 ```bash
 cd backend
-mvn test
-mvn verify
+mvn test          # unit + controller-slice tests, no Docker required
+mvn verify         # also runs Testcontainers integration tests - requires Docker
 ```
+
+`ConcurrencyIntegrationTest` fires 10 simultaneous duplicate follow/like requests and asserts
+exactly one row results in each case, backed by the database unique constraints, not just
+JVM-level locking.
 
 ### Frontend Tests
 
@@ -337,82 +371,49 @@ npm run test:ui
 
 ### E2E Tests
 
+The README previously claimed Cypress; the actual e2e spec (`frontend/e2e/happy-path.spec.ts`)
+uses **Playwright** and the Cypress dependency was unused dead weight - it's been removed.
+
 ```bash
 cd frontend
-npx cypress open
+npm run build && npm run preview &   # or point E2E_BASE_URL at a running instance
+npm run test:e2e
 ```
 
 ## Deployment
 
-### Free Deployment Guide 🚀
+### Free-tier Deployment (verified path this project actually uses)
 
-If you are looking for a way to deploy this project for free, check out our [Free Deployment Guide](DEPLOYMENT_FREE.md). It covers using services like Render, Vercel, Neon, and Upstash.
+See [DEPLOYMENT_FREE.md](DEPLOYMENT_FREE.md) - Neon (Postgres), Upstash (Redis), Aiven
+(Kafka), Render (backend), Vercel (frontend).
 
-### AWS ECS Deployment
-```bash
-docker build -t backend:latest ./backend
-docker build -t frontend:latest ./frontend
+### Hypothetical Cloud Architecture (not implemented)
 
-docker tag backend:latest <ecr-repo>/backend:latest
-docker tag frontend:latest <ecr-repo>/frontend:latest
+Earlier versions of this README described AWS ECS + S3 + CloudFront + RDS + ElastiCache as
+a "production" deployment target. None of that exists in this repository: there's no ECS
+task definition, no Terraform/CDK, no S3 upload code (the AWS SDK dependency was removed -
+image posts are a plain URL string), and no CloudFront config. If you want to build that out,
+it's a reasonable next step, not something to claim as already done.
 
-docker push <ecr-repo>/backend:latest
-docker push <ecr-repo>/frontend:latest
-```
+## Observability
 
-2. **Create ECS task definitions**
-3. **Deploy to ECS service**
-4. **Configure Application Load Balancer**
-5. **Set up Auto Scaling**
+- `/actuator/health`, `/actuator/metrics`, `/actuator/prometheus`
+- Custom counters, all real and incremented by actual code paths (not aspirational):
+  `posts.created`, `follows.created`, `likes.created`, `feed.cache.hit`, `feed.cache.miss`,
+  `kafka.events.produced`, `kafka.notifications.consumed`, `websocket.notifications.sent`
 
-### Environment-specific Configuration
+## Known Limitations
 
-- **Development**: Docker Compose
-- **Staging**: AWS ECS with smaller instances
-- **Production**: AWS ECS with auto-scaling, RDS, ElastiCache
+- No Google Cloud test credentials in CI, so OAuth2 login is implemented but not
+  runtime-verified end-to-end here - manual verification with real credentials is on you.
+- Image "upload" is a URL field; there's no file upload endpoint or object storage.
+- The feed is chronological only - no ranking, no ML personalization.
+- No HTTPS enforcement inside the app itself.
+- `react-router-dom` v6 has two known moderate CVEs with no non-breaking fix available at
+  time of writing; upgrading to v7 is a reasonable follow-up but out of scope here.
 
-## Performance
-
-### Optimization Strategies
-
-1. **Caching**
-   - Redis for feed data (10-minute TTL)
-   - Query result caching
-   - Static asset caching
-
-2. **Database**
-   - Indexed queries
-   - Connection pooling
-   - Batch operations
-
-3. **API**
-   - Pagination
-   - Lazy loading
-   - Response compression
-
-4. **Frontend**
-   - Code splitting
-   - Lazy component loading
-   - React Query caching
-
-### Metrics
-
-- **Backend**: Spring Boot Actuator + Prometheus
-- **Frontend**: Lighthouse CI
-- **Infrastructure**: AWS CloudWatch
-
-## OAuth2 Setup
-
-### Google OAuth2 Configuration
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project
-3. Enable Google+ API
-4. Create OAuth 2.0 credentials
-5. Add authorized redirect URIs:
-   - `http://localhost:8080/login/oauth2/code/google`
-   - `https://yourdomain.com/login/oauth2/code/google`
-6. Copy Client ID and Client Secret to `.env`
+See [docs/VERIFICATION_REPORT.md](docs/VERIFICATION_REPORT.md) for the complete list of what
+was found, fixed, and how each item was actually verified.
 
 ## Contributing
 
@@ -422,22 +423,6 @@ docker push <ecr-repo>/frontend:latest
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-### Code Style
-
-- **Backend**: Follow Google Java Style Guide
-- **Frontend**: Use Prettier and ESLint configurations
-
 ## License
 
 This project is licensed under the MIT License.
-
-## Support
-
-For issues and questions:
-- Create an issue on GitHub
-- Check existing documentation
-- Review API documentation
-
----
-
-Built with ❤️ using Spring Boot and React

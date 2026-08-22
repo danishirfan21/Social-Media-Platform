@@ -55,9 +55,18 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      # Two listeners: PLAINTEXT_INTERNAL is what other containers (the backend) use to
+      # reach Kafka by its service name; PLAINTEXT is for host-machine tools connecting
+      # to the published port. Advertising only "localhost:9092" (the old config) breaks
+      # every client running inside a container, since Kafka tells clients to reconnect
+      # to the advertised address after the initial handshake, and "localhost" inside the
+      # backend container resolves to the backend container itself, not Kafka.
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     networks:
       - social-media-network
     healthcheck:
@@ -87,7 +96,8 @@ services:
       DB_PASSWORD: postgres
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      KAFKA_SERVERS: kafka:9092
+      REDIS_SSL_ENABLED: "false"
+      KAFKA_SERVERS: kafka:29092
       JWT_SECRET: your-secret-key-change-this-in-production-must-be-at-least-256-bits-long
       SERVER_PORT: 8080
     ports:
@@ -95,17 +105,26 @@ services:
     networks:
       - social-media-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
 
   # React Frontend
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      # Vite bakes this in at build time - it cannot be overridden via `environment:`
+      # on the running container since the JS bundle is already static by then.
+      args:
+        VITE_API_BASE_URL: http://localhost:8080/api
     container_name: social-media-frontend
     depends_on:
-      - backend
-    environment:
-      VITE_API_BASE_URL: http://localhost:8080/api
+      backend:
+        condition: service_healthy
     ports:
       - "3000:80"
     networks:
