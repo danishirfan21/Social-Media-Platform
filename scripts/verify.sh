@@ -32,6 +32,23 @@ if ! command -v jq >/dev/null 2>&1; then
   sudo apt-get update -y && sudo apt-get install -y jq
 fi
 
+# Pin JAVA_HOME to a JDK that actually supports --release 17, since some environments
+# (e.g. this project's Codespace devcontainer) default `java`/`mvn` to a newer JDK where
+# `javac --release 17` fails outright rather than just warning.
+if [ -d /usr/local/sdkman/candidates/java ]; then
+  for candidate in /usr/local/sdkman/candidates/java/21* /usr/local/sdkman/candidates/java/17*; do
+    if [ -x "$candidate/bin/javac" ]; then
+      export JAVA_HOME="$candidate"
+      export PATH="$JAVA_HOME/bin:$PATH"
+      break
+    fi
+  done
+fi
+
+# Portable numeric comparison (a > b) without depending on `bc`, which isn't installed
+# in every environment (including this project's own Codespace devcontainer).
+gt() { awk -v a="$1" -v b="$2" 'BEGIN{exit !(a>b)}'; }
+
 # Safe HTTP helper: writes body to $1, status code to stdout. Never pipes a body into
 # grep, so a truncated/odd response can't SIGPIPE the script (set -o pipefail trap).
 http_call() {
@@ -136,7 +153,7 @@ http_call GET "$BACKEND_URL/api/feed?page=0" "$TMP_DIR/feed1.json" "" "$TOKEN_B"
   | grep -q '^200$' && ok "feed request 1 (expect cache miss)" || fail "feed request 1"
 
 MISS_AFTER_1=$(curl -sS "$BACKEND_URL/actuator/metrics/feed.cache.miss" | jq -r '.measurements[0].value // 0')
-if [ "$(echo "$MISS_AFTER_1 > $MISS_BEFORE" | bc -l 2>/dev/null || echo 0)" = "1" ]; then
+if gt "$MISS_AFTER_1" "$MISS_BEFORE"; then
   ok "feed.cache.miss incremented on first request"
 else
   fail "feed.cache.miss did not increment on first request"
@@ -146,7 +163,7 @@ http_call GET "$BACKEND_URL/api/feed?page=0" "$TMP_DIR/feed2.json" "" "$TOKEN_B"
   | grep -q '^200$' && ok "feed request 2 (expect cache hit)" || fail "feed request 2"
 
 HIT_AFTER=$(curl -sS "$BACKEND_URL/actuator/metrics/feed.cache.hit" | jq -r '.measurements[0].value // 0')
-if [ "$(echo "$HIT_AFTER > $HIT_BEFORE" | bc -l 2>/dev/null || echo 0)" = "1" ]; then
+if gt "$HIT_AFTER" "$HIT_BEFORE"; then
   ok "feed.cache.hit incremented on repeated request"
 else
   fail "feed.cache.hit did not increment on repeated request"
@@ -183,7 +200,7 @@ KAFKA_PRODUCED=$(curl -sS "$BACKEND_URL/actuator/metrics/kafka.events.produced" 
 KAFKA_CONSUMED=$(curl -sS "$BACKEND_URL/actuator/metrics/kafka.notifications.consumed" | jq -r '.measurements[0].value // 0')
 WS_SENT=$(curl -sS "$BACKEND_URL/actuator/metrics/websocket.notifications.sent" | jq -r '.measurements[0].value // 0')
 echo "kafka.events.produced=$KAFKA_PRODUCED kafka.notifications.consumed=$KAFKA_CONSUMED websocket.notifications.sent=$WS_SENT"
-if [ "$(echo "$KAFKA_PRODUCED > 0 && $KAFKA_CONSUMED > 0 && $WS_SENT > 0" | bc -l 2>/dev/null || echo 0)" = "1" ]; then
+if gt "$KAFKA_PRODUCED" 0 && gt "$KAFKA_CONSUMED" 0 && gt "$WS_SENT" 0; then
   ok "Kafka + WebSocket counters are non-zero"
 else
   fail "Kafka/WebSocket counters are zero - event path not actually exercised"
