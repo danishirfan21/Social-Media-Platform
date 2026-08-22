@@ -50,6 +50,18 @@ jwt:
   expiration: 3600000
   refresh-expiration: 86400000
 
+# The whole test suite runs in one JVM/Spring context, so the production authApi rate
+# limiter (5 calls/60s) is shared across every controller/integration test that hits
+# /api/auth/**, and gets exhausted well before the suite finishes - this is a test
+# isolation concern, not a production rate-limiting concern, so it's relaxed here only.
+resilience4j:
+  ratelimiter:
+    instances:
+      authApi:
+        limit-for-period: 10000
+        limit-refresh-period: 60s
+        timeout-duration: 0s
+
 logging:
   level:
     com.socialmedia.platform: DEBUG
