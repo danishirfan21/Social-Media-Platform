@@ -23,6 +23,11 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- Spring Boot 3.2.0 manages Testcontainers 1.19.3, whose bundled docker-java
+             client fails against modern Docker Engine daemons (observed: "client version
+             1.32 is too old, minimum supported is 1.40" against Docker 29.x in a GitHub
+             Codespace). Overriding to a newer Testcontainers fixes this. -->
+        <testcontainers.version>1.20.4</testcontainers.version>
     </properties>
 
     <dependencies>
