@@ -5,18 +5,20 @@ import com.socialmedia.platform.exception.BadRequestException;
 import com.socialmedia.platform.repository.FollowRepository;
 import com.socialmedia.platform.repository.UserRepository;
 import com.socialmedia.platform.security.UserPrincipal;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.core.Authentication;
 
 import java.util.Optional;
 
-import static com.socialmedia.platform.config.KafkaConfig.FOLLOW_TOPIC;
 import static com.socialmedia.platform.config.KafkaConfig.NOTIFICATION_TOPIC;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -33,6 +35,8 @@ class FollowServiceTest {
     private UserService userService;
     @Mock
     private KafkaTemplate<String, Object> kafkaTemplate;
+    @Spy
+    private MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     @InjectMocks
     private FollowService followService;
@@ -59,8 +63,7 @@ class FollowServiceTest {
 
         followService.followUser(2L, authentication);
 
-        verify(followRepository).save(any());
-        verify(kafkaTemplate).send(eq(FOLLOW_TOPIC), any());
+        verify(followRepository).saveAndFlush(any());
         verify(kafkaTemplate).send(eq(NOTIFICATION_TOPIC), any());
     }
 
@@ -71,11 +74,20 @@ class FollowServiceTest {
 
     @Test
     void unfollowUser_ShouldSucceed() {
-        when(followRepository.existsByFollowerIdAndFollowingId(1L, 2L)).thenReturn(true);
-
         followService.unfollowUser(2L, authentication);
 
         verify(followRepository).deleteByFollowerIdAndFollowingId(1L, 2L);
-        verify(kafkaTemplate).send(eq(FOLLOW_TOPIC), any());
+    }
+
+    @Test
+    void followUser_ShouldBeIdempotent_WhenAlreadyFollowing() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(follower));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(following));
+        when(followRepository.existsByFollowerIdAndFollowingId(1L, 2L)).thenReturn(true);
+
+        followService.followUser(2L, authentication);
+
+        verify(followRepository, never()).saveAndFlush(any());
+        verify(kafkaTemplate, never()).send(eq(NOTIFICATION_TOPIC), any());
     }
 }

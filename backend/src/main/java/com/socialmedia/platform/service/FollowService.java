@@ -4,15 +4,17 @@ import com.socialmedia.platform.dto.PagedResponse;
 import com.socialmedia.platform.dto.UserResponse;
 import com.socialmedia.platform.entity.Follow;
 import com.socialmedia.platform.entity.User;
-import com.socialmedia.platform.event.FollowEvent;
 import com.socialmedia.platform.event.NotificationEvent;
 import com.socialmedia.platform.exception.BadRequestException;
 import com.socialmedia.platform.exception.ResourceNotFoundException;
 import com.socialmedia.platform.repository.FollowRepository;
 import com.socialmedia.platform.repository.UserRepository;
 import com.socialmedia.platform.security.UserPrincipal;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -20,7 +22,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import static com.socialmedia.platform.config.KafkaConfig.FOLLOW_TOPIC;
 import static com.socialmedia.platform.config.KafkaConfig.NOTIFICATION_TOPIC;
 
 @Service
@@ -31,10 +32,17 @@ public class FollowService {
     private final FollowRepository followRepository;
     private final UserRepository userRepository;
     private final UserService userService;
-    private final KafkaTemplate<String, FollowEvent> followKafkaTemplate;
     private final KafkaTemplate<String, NotificationEvent> notificationKafkaTemplate;
+    private final MeterRegistry meterRegistry;
 
+    /**
+     * Idempotent by design: concurrent duplicate follow requests must result in exactly one
+     * Follow row. The existsBy check is a fast path; the DB unique constraint on
+     * (follower_id, following_id) is the real guard, so a losing concurrent insert is treated
+     * as a no-op success rather than an error.
+     */
     @Transactional
+    @CacheEvict(value = "userFeed", allEntries = true)
     public void followUser(Long userIdToFollow, Authentication authentication) {
         UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
 
@@ -49,7 +57,7 @@ public class FollowService {
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", userIdToFollow));
 
         if (followRepository.existsByFollowerIdAndFollowingId(follower.getId(), following.getId())) {
-            throw new BadRequestException("Already following this user");
+            return;
         }
 
         Follow follow = Follow.builder()
@@ -57,18 +65,15 @@ public class FollowService {
                 .following(following)
                 .build();
 
-        followRepository.save(follow);
+        try {
+            followRepository.saveAndFlush(follow);
+        } catch (DataIntegrityViolationException e) {
+            log.info("Follow {} -> {} already exists (concurrent request), treating as success",
+                    follower.getId(), following.getId());
+            return;
+        }
         log.info("User {} followed user {}", follower.getUsername(), following.getUsername());
-
-        // Publish follow event to Kafka
-        FollowEvent followEvent = FollowEvent.builder()
-                .followerId(follower.getId())
-                .followingId(following.getId())
-                .followerUsername(follower.getUsername())
-                .eventType(FollowEvent.EventType.FOLLOWED)
-                .build();
-
-        followKafkaTemplate.send(FOLLOW_TOPIC, followEvent);
+        meterRegistry.counter("follows.created").increment();
 
         // Send notification to the followed user
         NotificationEvent notificationEvent = NotificationEvent.builder()
@@ -79,28 +84,16 @@ public class FollowService {
                 .build();
 
         notificationKafkaTemplate.send(NOTIFICATION_TOPIC, notificationEvent);
+        meterRegistry.counter("kafka.events.produced", "topic", NOTIFICATION_TOPIC).increment();
     }
 
+    /** Idempotent: unfollowing a user you don't follow is a no-op, not an error. */
     @Transactional
+    @CacheEvict(value = "userFeed", allEntries = true)
     public void unfollowUser(Long userIdToUnfollow, Authentication authentication) {
         UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
-
-        if (!followRepository.existsByFollowerIdAndFollowingId(userPrincipal.getId(), userIdToUnfollow)) {
-            throw new BadRequestException("Not following this user");
-        }
-
         followRepository.deleteByFollowerIdAndFollowingId(userPrincipal.getId(), userIdToUnfollow);
         log.info("User {} unfollowed user {}", userPrincipal.getId(), userIdToUnfollow);
-
-        // Publish unfollow event to Kafka
-        FollowEvent followEvent = FollowEvent.builder()
-                .followerId(userPrincipal.getId())
-                .followingId(userIdToUnfollow)
-                .followerUsername(userPrincipal.getUsername())
-                .eventType(FollowEvent.EventType.UNFOLLOWED)
-                .build();
-
-        followKafkaTemplate.send(FOLLOW_TOPIC, followEvent);
     }
 
     @Transactional(readOnly = true)

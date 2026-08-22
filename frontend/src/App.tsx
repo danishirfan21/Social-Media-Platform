@@ -23,7 +23,9 @@ import MainLayout from './components/layout/MainLayout';
 import { useEffect } from 'react';
 import { useDispatch } from 'react-redux';
 import { userApi } from './api/userApi';
+import { connectNotifications, disconnectNotifications } from './api/websocket';
 import { setCredentials, setLoading } from './redux/slices/authSlice';
+import { addNotification } from './redux/slices/notificationSlice';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -73,6 +75,19 @@ function AppRoutes() {
 
     fetchUser();
   }, [dispatch, user]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      disconnectNotifications();
+      return;
+    }
+
+    connectNotifications((notification) => {
+      dispatch(addNotification(notification));
+    });
+
+    return () => disconnectNotifications();
+  }, [isAuthenticated, dispatch]);
 
   return (
     <Routes>

@@ -30,8 +30,8 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Run tests
-        run: mvn test
+      - name: Run tests (unit + Testcontainers integration - GitHub-hosted runners have Docker)
+        run: mvn verify
 
       - name: Build with Maven
         run: mvn clean package -DskipTests
@@ -78,9 +78,37 @@ jobs:
           name: frontend-dist
           path: frontend/dist
 
+  # Full-stack Docker Compose end-to-end verification: proves the real social-media
+  # workflow (register, login, post, follow, feed, Redis cache hit/miss, Kafka event ->
+  # notification, live WebSocket delivery, Prometheus metrics) against real containers.
+  docker-e2e:
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Run end-to-end verification
+        run: bash scripts/verify.sh
+
   # Docker Build and Push
   docker:
-    needs: [backend, frontend]
+    needs: [backend, frontend, docker-e2e]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
@@ -133,18 +161,16 @@ jobs:
           tags: ${{ steps.frontend-meta.outputs.tags }}
           labels: ${{ steps.frontend-meta.outputs.labels }}
 
-  # Deploy (placeholder - customize for your deployment target)
-  deploy:
+  # No actual deployment target is wired up (see DEPLOYMENT_FREE.md for the real, manual
+  # deploy path this project uses). This job intentionally does nothing beyond documenting
+  # where a real deploy step would go, so it can't be mistaken for a working CD pipeline.
+  deploy-placeholder:
     needs: docker
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
-      - name: Deploy to production
+      - name: No-op - illustrative only
         run: |
-          echo "Deploy to AWS ECS, Kubernetes, or your preferred platform"
-          # Add your deployment commands here
-          # Example for AWS ECS:
-          # - Configure AWS credentials
-          # - Update ECS task definition
-          # - Deploy to ECS service
+          echo "No deployment target is configured for this project."
+          echo "See DEPLOYMENT_FREE.md for the actual (manual) deployment steps used."

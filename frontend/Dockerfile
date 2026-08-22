@@ -13,6 +13,12 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# Vite inlines env vars at build time, so the API/WS base URL must be supplied as a
+# build arg (docker-compose passes it via build.args) rather than a container env var -
+# setting VITE_API_BASE_URL on the running container would silently do nothing.
+ARG VITE_API_BASE_URL=http://localhost:8080/api
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+
 # Build application
 RUN npm run build
 

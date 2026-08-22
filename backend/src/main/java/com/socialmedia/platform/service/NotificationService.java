@@ -5,10 +5,12 @@ import com.socialmedia.platform.dto.PagedResponse;
 import com.socialmedia.platform.entity.Notification;
 import com.socialmedia.platform.entity.User;
 import com.socialmedia.platform.event.NotificationEvent;
+import com.socialmedia.platform.exception.ForbiddenException;
 import com.socialmedia.platform.exception.ResourceNotFoundException;
 import com.socialmedia.platform.repository.NotificationRepository;
 import com.socialmedia.platform.repository.UserRepository;
 import com.socialmedia.platform.security.UserPrincipal;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -29,11 +31,13 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final MeterRegistry meterRegistry;
 
     @KafkaListener(topics = NOTIFICATION_TOPIC, groupId = "social-media-group")
     @Transactional
     public void consumeNotificationEvent(NotificationEvent event) {
         log.info("Received notification event for user: {}", event.getUserId());
+        meterRegistry.counter("kafka.notifications.consumed").increment();
 
         User user = userRepository.findById(event.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", event.getUserId()));
@@ -56,6 +60,7 @@ public class NotificationService {
                 "/queue/notifications",
                 response
         );
+        meterRegistry.counter("websocket.notifications.sent").increment();
     }
 
     @Transactional(readOnly = true)
@@ -103,7 +108,7 @@ public class NotificationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Notification", "id", notificationId));
 
         if (!notification.getUser().getId().equals(userPrincipal.getId())) {
-            throw new RuntimeException("Unauthorized to mark this notification as read");
+            throw new ForbiddenException("Unauthorized to mark this notification as read");
         }
 
         notification.setIsRead(true);

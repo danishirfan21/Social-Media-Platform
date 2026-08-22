@@ -3,12 +3,15 @@ package com.socialmedia.platform.service;
 import com.socialmedia.platform.dto.*;
 import com.socialmedia.platform.entity.*;
 import com.socialmedia.platform.event.NotificationEvent;
+import com.socialmedia.platform.exception.ForbiddenException;
 import com.socialmedia.platform.exception.ResourceNotFoundException;
 import com.socialmedia.platform.repository.*;
 import com.socialmedia.platform.security.UserPrincipal;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -29,6 +32,7 @@ public class PostService {
     private final CommentRepository commentRepository;
     private final UserService userService;
     private final KafkaTemplate<String, NotificationEvent> kafkaTemplate;
+    private final MeterRegistry meterRegistry;
 
     @Transactional
     @CacheEvict(value = "userFeed", allEntries = true)
@@ -58,6 +62,7 @@ public class PostService {
 
         post = postRepository.save(post);
         log.info("Post created by user: {}", user.getUsername());
+        meterRegistry.counter("posts.created").increment();
 
         return mapToPostResponse(post, authentication);
     }
@@ -83,7 +88,7 @@ public class PostService {
                 .orElseThrow(() -> new ResourceNotFoundException("Post", "id", postId));
 
         if (!post.getUser().getId().equals(userPrincipal.getId())) {
-            throw new RuntimeException("Unauthorized to update this post");
+            throw new ForbiddenException("Unauthorized to update this post");
         }
 
         post.setContent(request.getContent());
@@ -102,13 +107,19 @@ public class PostService {
                 .orElseThrow(() -> new ResourceNotFoundException("Post", "id", postId));
 
         if (!post.getUser().getId().equals(userPrincipal.getId())) {
-            throw new RuntimeException("Unauthorized to delete this post");
+            throw new ForbiddenException("Unauthorized to delete this post");
         }
 
         postRepository.delete(post);
         log.info("Post deleted: {}", postId);
     }
 
+    /**
+     * Idempotent by design: the existsBy check is a fast path, the DB unique constraint on
+     * (post_id, user_id) is the real guard against concurrent duplicate likes. A losing
+     * concurrent insert is treated as a no-op success rather than an error, and only the
+     * winning insert emits a notification.
+     */
     @Transactional
     public void likePost(Long postId, Authentication authentication) {
         UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
@@ -118,18 +129,28 @@ public class PostService {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post", "id", postId));
 
-        if (!likeRepository.existsByPostIdAndUserId(postId, user.getId())) {
-            Like like = Like.builder()
-                    .post(post)
-                    .user(user)
-                    .build();
-            likeRepository.save(like);
+        if (likeRepository.existsByPostIdAndUserId(postId, user.getId())) {
+            return;
+        }
 
-            // Send notification to post author
-            if (!post.getUser().getId().equals(user.getId())) {
-                sendNotification(post.getUser().getId(), "POST_LIKED",
-                        user.getUsername() + " liked your post", user.getId(), postId);
-            }
+        Like like = Like.builder()
+                .post(post)
+                .user(user)
+                .build();
+
+        try {
+            likeRepository.saveAndFlush(like);
+        } catch (DataIntegrityViolationException e) {
+            log.info("Like on post {} by user {} already exists (concurrent request), treating as success",
+                    postId, user.getId());
+            return;
+        }
+        meterRegistry.counter("likes.created").increment();
+
+        // Send notification to post author
+        if (!post.getUser().getId().equals(user.getId())) {
+            sendNotification(post.getUser().getId(), "POST_LIKED",
+                    user.getUsername() + " liked your post", user.getId(), postId);
         }
     }
 
@@ -244,5 +265,6 @@ public class PostService {
                 .build();
 
         kafkaTemplate.send(NOTIFICATION_TOPIC, event);
+        meterRegistry.counter("kafka.events.produced", "topic", NOTIFICATION_TOPIC).increment();
     }
 }

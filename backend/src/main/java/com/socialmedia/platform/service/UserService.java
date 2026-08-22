@@ -2,6 +2,7 @@ package com.socialmedia.platform.service;
 
 import com.socialmedia.platform.dto.UserResponse;
 import com.socialmedia.platform.entity.User;
+import com.socialmedia.platform.exception.ForbiddenException;
 import com.socialmedia.platform.exception.ResourceNotFoundException;
 import com.socialmedia.platform.repository.FollowRepository;
 import com.socialmedia.platform.repository.UserRepository;
@@ -50,7 +51,7 @@ public class UserService {
         UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
 
         if (!userId.equals(userPrincipal.getId())) {
-            throw new RuntimeException("Unauthorized to update this profile");
+            throw new ForbiddenException("Unauthorized to update this profile");
         }
 
         User user = userRepository.findById(userId)
